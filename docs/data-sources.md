@@ -1,64 +1,154 @@
-# Data sources and endpoint inventory
+# Neptune data sources and endpoint verification
 
-All paths below are from the checked-in NeptuneScan OpenAPI contract and are prefixed by `/api` by the Go server. They are not confirmed live endpoints.
+Research pass checked 2026-10-12. Paths below are from the checked-in
+`neptuneprivacy/neptunescan-explorer` repository unless explicitly labeled as
+live observations. Repository paths are not automatically confirmed live
+endpoints.
 
-## Explorer API
+## Block lookup endpoint smoke test
 
-| Purpose | Endpoint | Response/source | Authority and limitations |
-|---|---|---|---|
-| Overview/latest block | `GET /api/overview` | `overview` with `height`, `block_hash`, `timestamp`, `proof_target`, `cumulative_proof_of_work`, `network_speed_24h`, `average_block_time`, `total_reward`, `day_reward`, `total_fee`, `day_fee`, counts | Calculated/aggregated from the explorer DB. Latest stored block, not necessarily a live node tip if ingestion lags. |
-| Canonical block list | `GET /api/blocks?page={page}&page_size={page_size}` | Canonical blocks with height, hash, reward, fee, inputs, outputs, proof target, time | DB-backed; page size is capped at 100 by handler. |
-| Block detail | `GET /api/block/{height}` | Canonical flag, height, hash, reward, fee, difficulty, time | DB-backed; missing blocks produce an error response. |
-| Node block lookup | `GET /api/rpc/block/{height_or_hash}` | Converted node RPC block | Direct node lookup through the explorer's configured RPC. The explorer source calls `/rpc/block_info/height_or_digest/{height_or_hash}`. |
-| Difficulty history | `GET /api/trend/target?duration=all|month|week|day` | `{success, chart:[{interv,value,height}]}` | `value` is SQL `avg(difficulty)` in time buckets; not a raw per-block difficulty series. |
-| Reward history | `GET /api/trend/reward?duration=all|month|week|day` | `{success, chart:[{interv,value,fee,height}]}` | `value` is sum of `coinbase_amount`; `fee` is sum of fees in each bucket. |
-| Fee history | `GET /api/trend/fee?...` | `{success, chart:[{interv,value,height}]}` | Sum of fees in each bucket. |
-| Blocks WebSocket | `GET/upgrade /api/block/ws` | Source registers a WebSocket handler | Exact event JSON and reconnect semantics require inspecting the deployed handler/runtime; do not assume event names. |
-| Mempool | `GET /api/block/mempool` and block/mempool subscription | OpenAPI route plus source subscription goroutine | Exact freshness and event schema require live verification. |
-| Swagger | `GET /api/swagger.json` | OpenAPI JSON in contract | The checked-in live host returned 404; current deployment may have moved/removed it. |
+The API base URL used for the block lookup is configurable through
+`NEPTUNE_API_BASE_URL` and defaults to `https://api.neptunescan.io`.
+`GET https://api.neptunescan.io/api/block/92031` returned HTTP 200 with
+`success: true` during the Phase 3B smoke test. This successful sample
+verifies endpoint reachability and the observed response shape only. It does
+not establish canonical network identity, data freshness, or production
+reliability. The bot uses `GET /api/block/{height}` and validates the response
+before displaying it.
+
+The block detail fields used by the bot are `detail.block` (height),
+`detail.block_hash` (hash), `detail.time` (timestamp), `detail.target`
+(large numeric string), and `detail.is_canonical` (boolean). Reward and fee
+fields are intentionally not displayed because their base-unit conversion has
+not been verified.
+
+`GET https://api.neptunescan.io/api/overview` also returned HTTP 200 during
+verification but consistently reported `success: false`; it is not used by
+the bot. By contrast, `https://neptunescan.io/api/overview` returned HTTP 404,
+and `https://neptunescan.io/api/swagger.json` returned HTTP 404. The
+API-subdomain Swagger endpoint was separately observed to work; these
+host-specific observations must not be generalized across hosts. Live network
+identity, base-unit conversion, and data freshness remain unverified.
+
+## Explorer frontend to backend trace
+
+The frontend functions in `frontend/src/utils/api/apis.ts` use Axios with a
+25-second timeout. The request interceptor can add `authorization` and
+`productName` headers from browser `localStorage`, but the OpenAPI operations
+declare `security: []`. This proves an authentication-capable client path, not
+that the deployed API requires authentication.
+
+| Frontend function | Method and path | Checked-in response/meaning |
+|---|---|---|
+| `queryOverviewData` | `GET /api/overview` | `{success, overview}` with height, block hash, timestamp, proof target, cumulative work, network speed, average block time, total/day reward, total/day fee, transaction and UTXO counts. |
+| `queryLatestBlocks`, `queryBlocks` | `GET /api/blocks?page={page}&page_size={size}` | Canonical blocks: height, digest, coinbase reward, fee, inputs, outputs, proof target, time, plus count. Both functions call the same route. |
+| `queryOrphaned` | `GET /api/orphaned?page={page}&page_size={size}` | Same block-item shape, filtered to orphaned rows. |
+| `queryBlockDetail` | `GET /api/block/{height}` | Block height, coinbase reward, gas/fee, hash, canonical flag, target and time. |
+| `queryBlockByRpc` | `GET /api/rpc/block/{height_or_hash}` | JSON-encoded internal explorer `models.Block`, obtained through the server's configured node client. |
+| `queryStatsTargetChartData` | `GET /api/trend/target?duration=all\|month\|week\|day` | `{success, chart:[{interv,value,height?}]}`; SQL average of stored difficulty per time bucket. |
+| `queryStatsGuesserChartData` | `GET /api/trend/fee?duration=...` | `{success, chart:[{interv,value,height?}]}`; SQL sum of fees per time bucket. |
+| `queryStatsRewardChartData` | `GET /api/trend/reward?duration=...` | `{success, chart:[{interv,value,fee,height?}]}`; SQL sums of coinbase amount and fee. |
+| `queryTransactions` | `GET /api/tx/list?page={page}&pageSize={size}` | Transaction list; note the camel-case `pageSize` differs from block pagination. |
+| `queryTransactionByBlock` | `GET /api/transaction/by_height/{height}` | `{success, txs}` from the explorer database. |
+| `querySearchApi` | `GET /api/search?q={searchValue}` | Search contract; semantics still require verification. |
+| `queryMinerStat`, `queryMinerBlocks` | `GET /api/miner/stat/{digest}`, `GET /api/miner/blocks/{digest}?page={page}&page_size={size}` | Miner-specific database views, not an authoritative network hashrate source. |
+
+The backend separately registers `GET /api/block/ws` and exposes an OpenAPI
+SSE route `GET /api/block/event`. The checked-in frontend uses the WebSocket.
+The OpenAPI SSE example emits an event named `blocks` with height, timestamp,
+inputs and outputs, but this is a contract example, not a live capture.
+
+The backend mounts generated routes below `/api`, returns
+`{success:false,message:...}` for handler errors, enables wildcard CORS with
+credentials, and listens internally on `0.0.0.0:8080`. These are source facts,
+not production deployment facts.
+
+## Calculation and storage behavior
+
+- `/api/overview` selects the highest stored block, reads persisted total reward
+  and fee sums, counts UTXOs and transactions, and computes the recent work
+  rate and average block time from the latest block and the block at
+  `latest_height - 144` (or a shorter distance on a short chain).
+- `network_speed_24h` is cumulative-work delta divided by timestamp delta. It is
+  a work-rate estimate, not verified conventional hashes/second.
+- Target trend uses `avg(difficulty)`. Reward trend uses
+  `sum(coinbase_amount)` and `sum(fee)`. Fee trend uses `sum(fee)`.
+- Block pagination defaults to 10 and is capped at 100 in the Go handler.
+- The API is backed by PostgreSQL/TimescaleDB and therefore provides historical
+  data only as retained by that deployment. Canonical and orphaned rows are
+  handled by separate scopes.
 
 ## Node RPC sources
 
-The older explorer RPC client uses:
+The older Go explorer client uses REST-like upstream calls including
+`/rpc/block_info/tip`, `/rpc/block_info/height_or_digest/{height_or_hash}`,
+`/rpc/utxo_digest/{index}`, and mempool routes. The current xnt-core JSON-RPC
+trait includes `network`, `height`, `tip_digest`, `tip`, `tip_header`,
+`get_block`, `get_block_header`, `block_info`, and `get_blocks`. Its integration
+test uses `tip` and shows archival `get_block` is unavailable by default.
+Request and result serialization must be captured from the exact deployed
+xnt-core revision before implementing a client.
 
-- `/rpc/block_info/tip` for the current tip;
-- `/rpc/block_info/height_or_digest/{height_or_hash}` for a block;
-- `/rpc/utxo_digest/{index}` for an indexed UTXO digest;
-- `/rpc/mempool/0/1000` for mempool transactions;
-- `/rpc/mempool/events?txid={txid}` for transaction events.
+The separate Rust `xnt-explorer` exposes candidate supply routes
+`/rpc/circulating_supply` and `/rpc/total_supply`. Both query the connected
+xnt-core height and calculate whole-coin values locally from a premine plus
+completed/current-generation subsidy. The source comments assume old-chain
+redemption claims have been rewarded. Its RPC wrapper also has a `MOCK`
+fallback that can return imagined deterministic block data after an RPC
+failure. It is a different service and must not be used for live statistics
+unless its deployment, response schema, supply assumptions and mock setting are
+verified.
 
-The current xnt-core client uses JSON-RPC 2.0 POST requests and calls `tip`; its test calls `get_block` through an archival selector and expects `MethodNotFound` when archival mode is disabled. The exact current RPC API must be read from the pinned xnt-core revision before writing a client.
+## xnt-core network identity facts
 
-The separate Rust [xnt-explorer](https://github.com/neptuneprivacy/xnt-explorer) registers `/rpc/circulating_supply` and `/rpc/total_supply` in addition to block and UTXO REST façades. These endpoints are candidates for supply research only; they are not proven to back the live NeptuneScan deployment, and their response schemas must be captured from a verified service.
+The current xnt-core source defines `Network::Main` (id `0`), testnet-mock,
+regtest and numbered testnets. It documents mainnet's five-minute target block
+interval, 60-second minimum block time, and no difficulty reset; test networks
+have different rules. The source defines mainnet launch timestamp
+`1764288000000`, genesis difficulty limbs
+`[100_000_000, 0, 0, 0, 0]`, and a source-level block-0 digest expectation
+`3b012c9abf353d9201bc3328391bbd0d43c5edb91da1085be15a3fc52ad55f65ea115d255922b5a4`.
+These are constants and test expectations in the current repository, not proof
+that the public explorer is connected to that revision or network. The digest
+has not been checked against a live public RPC.
 
-## Verified model fields
+Current source-level monetary constants also include 8,640 blocks per
+generation, a one-XNT tail subsidy from generation 72, and a 1,942,384-XNT
+premine. These conflict with stale tokenomics copy in the checked-in frontend;
+the bot must not select between them without live-network and revision
+verification.
 
-The checked-in explorer model maps an RPC block to:
+## Public URL probes
 
-`height`, `digest`, `prev_block_digest`, `nonce`, `timestamp`, `cumulative_proof_of_work`, `difficulty`, `num_inputs`, `num_outputs`, `inputs`, `outputs`, `guesser_fee_utxo_digests`, `num_public_announcements`, `coinbase_amount`, `fee`, `is_genesis`, `is_tip`, `is_canonical`, `sibling_blocks`, and `guesser_digest`.
+| UTC check date | URL | Result | Interpretation |
+|---|---|---|---|
+| 2026-10-12 | `https://neptunescan.io/` | HTTP success; HTML identifies the Neptune Privacy Explorer | Site responds; same-origin API is not established. |
+| 2026-10-12 | `https://neptunescan.io/api/overview` | HTTP 404 | Candidate path is not served at this host/path. |
+| 2026-10-12 | `https://neptunescan.io/api/swagger.json` | HTTP 404 | Candidate Swagger path is not served at this host/path. |
+| 2026-10-12 | `https://api.neptunescan.io/api/block/92031` | HTTP 200; JSON `success: true` | Block-detail endpoint is reachable and returned the observed response shape only; identity, freshness, and reliability remain unverified. |
+| 2026-10-12 | `https://api.neptunescan.io/api/overview` | HTTP 200; JSON `success: false` | Reachable but not a successful metric response; not used by the bot. |
+| 2026-10-12 | `https://api.neptunescan.io/api/swagger.json` | Separately observed to work | API-subdomain result is distinct from the same-origin 404. |
 
-The old REST model serializes cumulative work and difficulty as arrays of `uint32` limbs, while the database/API model serializes large numeric values as strings. The bot should preserve strings/decimal big integers and never parse these into JavaScript `number`.
+The checked-in frontend defaults are `https://neptune.vxb.ai`,
+`wss://neptune.vxb.ai/api/block/ws`, and
+`https://neptune.vxb.ai/api/swagger.json`. They are repository defaults, not
+live verification. A block-detail response was captured from the separate API
+subdomain, but no successful live metric response or genesis identifier was
+established in this pass.
 
 ## Historical-data decision
 
-Historical data already exists in the explorer's TimescaleDB if the public API is available. It is reusable for charts and recent aggregates, but it is not independently authoritative until:
+Historical data is present in the explorer's TimescaleDB and could be reused
+for charts and aggregates if a verified API deployment is found. Before reuse,
+measure freshness, reorg handling, canonical/orphan semantics, retention and
+rate limits. Use API reuse with a small bot cache before operating an indexer;
+operate an independent node/indexer only when reliable historical access or
+independent verification is required.
 
-1. the API is reachable;
-2. its ingestion lag and reorg handling are measured;
-3. canonical/orphan semantics are confirmed;
-4. retention and rate limits are known.
+## Required pre-implementation fixtures
 
-If those checks pass, start with API reuse and a small bot cache. Run an independent indexer/full node only when the operator cannot provide reliable historical access, when long-term retention is required, or when independent verification is a product requirement.
-
-## Required capture fixture
-
-Before implementation, save redacted fixtures under `docs/fixtures/` for:
-
-- overview;
-- one tip/block lookup;
-- target trend for each supported duration;
-- reward trend;
-- one WebSocket block event;
-- one current xnt-core JSON-RPC response.
-
-Each fixture must include source URL/method, UTC capture time, status code, and a note identifying whether it came from the live explorer or a pinned local node. No secrets or authorization headers belong in fixtures.
+Capture redacted fixtures for overview, a tip/block lookup, each trend
+duration, one WebSocket event and one current xnt-core JSON-RPC response.
+Every fixture must record method, exact URL, UTC time, status, content type and
+whether it came from a live service or a pinned local node. Never store
+authorization headers or secrets.

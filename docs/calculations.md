@@ -1,5 +1,12 @@
 # Calculations and semantics
 
+The source semantics below are traced to the pinned
+[NeptuneScan revision `cc7bf29b057cbc33e4b690b62c6ed5e3018112c1`](https://github.com/neptuneprivacy/neptunescan-explorer/commit/cc7bf29b057cbc33e4b690b62c6ed5e3018112c1)
+and [xnt-core revision
+`cc8e8704026c916d545f02aa4d03b5693b6a58dd`](https://github.com/neptuneprivacy/xnt-core/commit/cc8e8704026c916d545f02aa4d03b5693b6a58dd).
+They are source-code findings, not proof that the live API or explorer uses
+those revisions.
+
 ## Height and latest block
 
 The explorer overview selects the highest stored block height. A node tip is authoritative for current chain state; an explorer overview is authoritative only for the explorer's indexed view. Compare both when possible and expose a “data delayed” state if they diverge.
@@ -56,6 +63,31 @@ No checked-in explorer endpoint or model field confirms circulating supply or to
 
 Until then, display “not available” rather than estimate.
 
+## Explorer trend buckets
+
+The checked-in Go handlers use these TimescaleDB buckets:
+
+| Duration | Start window | Bucket |
+|---|---|---|
+| `day` | last 24 hours, bounded by genesis | 30 minutes |
+| `week` | last 7 days, bounded by genesis | 1 hour |
+| `month` | last 30 days, bounded by genesis | 1 day |
+| `all` | from block height 1 | 1 day |
+
+Target values are `avg(difficulty)`. Fee values are `sum(fee)`. Reward values
+are `sum(coinbase_amount)` with a separate `sum(fee)`. These are database
+aggregates, not protocol calculations, and the live service may have different
+retention or ingestion behavior.
+
+## Network-dependent rules
+
+The current xnt-core source distinguishes mainnet (`Network::Main`, id 0) from
+testnet-mock, regtest and numbered testnets. Mainnet source constants include a
+five-minute target interval, a 60-second minimum block interval and no
+difficulty-reset interval. These constants must not be applied to explorer
+data until the live node's network identity and deployed xnt-core revision are
+compared with the pinned source.
+
 ## Precision and validation
 
 Large work, reward, fee, and difficulty values must be represented as decimal strings or arbitrary-precision integers. Validate:
@@ -67,4 +99,3 @@ Large work, reward, fee, and difficulty values must be represented as decimal st
 - denominators are positive;
 - API `success` is true before reading payload fields;
 - canonical and orphaned blocks are not mixed in aggregates.
-
