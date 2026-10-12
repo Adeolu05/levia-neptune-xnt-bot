@@ -1,12 +1,14 @@
 import { Bot, type Context } from 'grammy';
 import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
-import { handleAbout, handleHelp, handleStart } from './commands.js';
+import { NeptuneScanProvider } from '../neptune/provider.js';
+import { createBlockHandler, handleAbout, handleHelp, handleStart } from './commands.js';
 
 export const TELEGRAM_COMMANDS = [
   { command: 'start', description: 'Show a welcome message' },
   { command: 'help', description: 'Show available commands' },
   { command: 'about', description: 'Learn about this bot' },
+  { command: 'block', description: 'Look up a block by height' },
 ];
 
 export function describeError(error: unknown): { name: string; message: string } {
@@ -22,6 +24,7 @@ export function createBot(config: AppConfig, logger: Logger): Bot<Context> {
   bot.command('start', handleStart);
   bot.command('help', handleHelp);
   bot.command('about', handleAbout);
+  bot.command('block', createBlockHandler(new NeptuneScanProvider(config.neptuneApiBaseUrl)));
 
   bot.catch((error) => {
     logger.error('Telegram update failed', {

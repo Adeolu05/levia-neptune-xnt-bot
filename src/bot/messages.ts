@@ -6,6 +6,7 @@ export const HELP_MESSAGE = [
   '/start - Show a welcome message',
   '/help - Show this help message',
   '/about - Learn about this bot',
+  '/block <height> - Look up a block',
 ].join('\n');
 
 export const ABOUT_MESSAGE = [
