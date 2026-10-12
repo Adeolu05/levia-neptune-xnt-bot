@@ -17,7 +17,7 @@ import {
 import { buildPriceReply, buildStatsReply, renderChartPng, type BotReply } from './replies.js';
 
 export const TELEGRAM_COMMANDS = [
-  { command: 'stats', description: 'Hashrate, difficulty and a 7-day chart' },
+  { command: 'hashrate', description: 'Hashrate, difficulty and a 7-day chart' },
   { command: 'price', description: 'Price, market cap and where to buy' },
   { command: 'mining', description: 'How to start mining XNT' },
   { command: 'links', description: 'Official ecosystem links' },
@@ -71,7 +71,8 @@ export function createBot(config: AppConfig, logger: Logger): Bot<Context> {
   bot.command('help', handleHelp);
   bot.command('about', handleAbout);
   bot.command(
-    ['stats', 'hashrate'],
+    // /stats is kept as a hidden alias for people who used it before the rename.
+    ['hashrate', 'stats'],
     createReplyHandler(getStatsReply, 'I could not load network stats right now.'),
   );
   bot.command(

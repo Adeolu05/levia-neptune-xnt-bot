@@ -1,8 +1,8 @@
 import 'dotenv/config';
 
 import { loadConfig } from './config.js';
-import { createShutdownHandler } from './lifecycle.js';
-import { createBot, TELEGRAM_COMMANDS } from './bot/create-bot.js';
+import { createShutdownHandler, startPollingWithRetry } from './lifecycle.js';
+import { createBot, describeError, TELEGRAM_COMMANDS } from './bot/create-bot.js';
 import { createLogger } from './logger.js';
 
 const config = loadConfig(process.env);
@@ -17,9 +17,21 @@ process.once('SIGINT', () => {
 process.once('SIGTERM', () => {
   void stop('SIGTERM');
 });
-
-await bot.api.setMyCommands(TELEGRAM_COMMANDS);
-logger.info('Telegram commands registered');
-bot.start({
-  onStart: ({ username }) => logger.info('Bot started with long polling', { username }),
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', { error: describeError(reason) });
 });
+
+try {
+  await bot.api.setMyCommands(TELEGRAM_COMMANDS);
+  logger.info('Telegram commands registered');
+  await startPollingWithRetry(
+    () =>
+      bot.start({
+        onStart: ({ username }) => logger.info('Bot started with long polling', { username }),
+      }),
+    logger,
+  );
+} catch (error) {
+  logger.error('Bot stopped because of an error', { error: describeError(error) });
+  process.exit(1);
+}

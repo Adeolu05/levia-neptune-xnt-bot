@@ -70,7 +70,7 @@ export const WELCOME_BANNER: BannerContent = {
   eyebrow: 'NEPTUNE PRIVACY · COMMUNITY BOT',
   title: 'Levia',
   subtitle: 'Network stats, XNT price and mining help',
-  chips: ['/stats', '/price', '/mining', '/links'],
+  chips: ['/hashrate', '/price', '/mining', '/links'],
 };
 
 export const LINKS_BANNER: BannerContent = {

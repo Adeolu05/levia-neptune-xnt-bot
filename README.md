@@ -6,7 +6,7 @@ Levia is a Telegram bot for the Neptune Privacy (XNT) community.
 
 | Command                       | What it shows                                                                                                             | Source                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `/stats` (alias `/hashrate`)  | 7-day hashrate chart, hashrate with 24h and 7d change, difficulty and block height                                        | NeptuneScan API             |
+| `/hashrate` (alias `/stats`)  | 7-day hashrate chart, hashrate with 24h and 7d change, difficulty and block height                                        | NeptuneScan API             |
 | `/price` (alias `/marketcap`) | 7-day price chart, price with 24h and 7d change, circulating supply, market cap, exchange buttons                         | CoinGecko + NeptuneScan     |
 | `/mining`                     | How to start mining, with links to `xnt-gpu-miner` and `xnt-core`                                                         | Static                      |
 | `/links`                      | Resources banner with buttons for the website, explorer, guides, news, Neptune Wallet apps, community channels and GitHub | Static (matches neptune.io) |
@@ -55,9 +55,34 @@ you perform a manual smoke test.
 ```powershell
 npm run test
 npm run lint
+npm run typecheck
 npm run build
 npm run format:check
 ```
+
+`npm run build` compiles `src/` to `dist/`; `npm start` runs `dist/index.js`.
+
+## Deploying to Railway
+
+The bot uses Telegram long polling, so it needs no domain, HTTPS or open
+port, just one always-on process. [`railway.json`](railway.json) tells Railway
+to run `npm run build`, start with `npm start`, and restart on failure.
+
+1. Create a project at [railway.com](https://railway.com), choose **Deploy from
+   GitHub repo**, and select this repository.
+2. In the service's **Variables**, add `TELEGRAM_BOT_TOKEN` (required). Optional:
+   `LOG_LEVEL` (`info` by default) and `NEPTUNE_API_BASE_URL`.
+3. Deploy. The logs should show `Telegram commands registered` and
+   `Bot started with long polling`.
+4. Stop any local `npm run dev` that uses the same token. Only one process can
+   poll a bot at a time.
+
+Every push to `main` redeploys automatically. During a redeploy the new
+instance waits and retries for up to a minute while the old one shuts down,
+instead of crashing on Telegram's polling conflict (HTTP 409).
+
+Run a single instance (one replica). Never commit `.env`; if a token is ever
+exposed, revoke it with BotFather and update the Railway variable.
 
 ## Project boundaries
 

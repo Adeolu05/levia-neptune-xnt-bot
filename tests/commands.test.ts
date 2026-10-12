@@ -21,7 +21,7 @@ describe('static command handlers', () => {
   });
 
   it('/help lists every public command and no longer lists /block', () => {
-    for (const command of ['/stats', '/price', '/mining', '/links', '/about', '/help']) {
+    for (const command of ['/hashrate', '/price', '/mining', '/links', '/about', '/help']) {
       expect(HELP_MESSAGE).toContain(command);
     }
     expect(HELP_MESSAGE).not.toContain('/block');
@@ -30,7 +30,7 @@ describe('static command handlers', () => {
 
   it('registers the Telegram menu without /block', () => {
     const commands = TELEGRAM_COMMANDS.map((entry) => entry.command);
-    expect(commands).toEqual(['stats', 'price', 'mining', 'links', 'help', 'about', 'start']);
+    expect(commands).toEqual(['hashrate', 'price', 'mining', 'links', 'help', 'about', 'start']);
   });
 
   it('keeps static HTML messages free of unescaped angle brackets outside tags', () => {
@@ -105,9 +105,16 @@ describe('static command handlers', () => {
     expect(ABOUT_MESSAGE).not.toMatch(/financial advice/i);
   });
 
-  it('/stats does not repeat circulating supply (it is shown by /price)', () => {
+  it('/hashrate does not repeat circulating supply (it is shown by /price)', () => {
     const caption = formatNetworkCaption({ height: 1, difficulty: 1n, hashrate: 1n, history: [] });
     expect(caption).not.toMatch(/supply/i);
     expect(HELP_MESSAGE).toContain('/price · XNT price, supply');
+  });
+
+  it('shows /hashrate, not /stats, in user-facing command lists', () => {
+    for (const message of [START_MESSAGE, HELP_MESSAGE]) {
+      expect(message).toContain('/hashrate');
+      expect(message).not.toContain('/stats');
+    }
   });
 });
