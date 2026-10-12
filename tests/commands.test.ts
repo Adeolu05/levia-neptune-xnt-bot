@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleAbout, handleHelp, handleStart } from '../src/bot/commands.js';
+import { START_MESSAGE } from '../src/bot/messages.js';
 
 function context(): { reply: ReturnType<typeof vi.fn> } {
   return { reply: vi.fn().mockResolvedValue(undefined) };
@@ -7,11 +8,7 @@ function context(): { reply: ReturnType<typeof vi.fn> } {
 
 describe('command handlers', () => {
   it.each([
-    [
-      '/start',
-      handleStart,
-      'Welcome to the Neptune Privacy community bot. Blockchain statistics are not connected yet.',
-    ],
+    ['/start', handleStart, START_MESSAGE],
     [
       '/help',
       handleHelp,
@@ -21,6 +18,7 @@ describe('command handlers', () => {
         '/help - Show this help message',
         '/about - Learn about this bot',
         '/block <height> - Look up a block',
+        '/links - Show official ecosystem links',
       ].join('\n'),
     ],
     [
@@ -35,5 +33,27 @@ describe('command handlers', () => {
     const ctx = context();
     await handler(ctx);
     expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(message);
+  });
+
+  it('/start describes current capabilities without the outdated message', async () => {
+    const ctx = context();
+
+    await handleStart(ctx);
+
+    expect(ctx.reply).toHaveBeenCalledWith(START_MESSAGE);
+    expect(START_MESSAGE).toContain('block lookups');
+    expect(START_MESSAGE).toContain('/help');
+    expect(START_MESSAGE).toContain('/links');
+    expect(START_MESSAGE).not.toContain('Blockchain statistics are not connected yet.');
+  });
+
+  it('/help lists /links', async () => {
+    const ctx = context();
+
+    await handleHelp(ctx);
+
+    expect(ctx.reply).toHaveBeenCalledWith(
+      expect.stringContaining('/links - Show official ecosystem links'),
+    );
   });
 });

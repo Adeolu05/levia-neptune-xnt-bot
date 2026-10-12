@@ -1,5 +1,8 @@
-export const START_MESSAGE =
-  'Welcome to the Neptune Privacy community bot. Blockchain statistics are not connected yet.';
+export const START_MESSAGE = [
+  'Welcome to Levia, a community and blockchain information bot for Neptune Privacy.',
+  'Currently available: block lookups, ecosystem information, and official resource links.',
+  'Use /help for commands or /links for official Neptune Privacy resources.',
+].join('\n');
 
 export const HELP_MESSAGE = [
   'Available commands:',
@@ -7,6 +10,7 @@ export const HELP_MESSAGE = [
   '/help - Show this help message',
   '/about - Learn about this bot',
   '/block <height> - Look up a block',
+  '/links - Show official ecosystem links',
 ].join('\n');
 
 export const ABOUT_MESSAGE = [
