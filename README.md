@@ -1,12 +1,28 @@
 # Neptune Privacy Community Bot
 
-This repository contains the Phase 1 Telegram bot foundation for the Neptune Privacy
-ecosystem. It currently provides only `/start`, `/help`, and `/about`.
+Levia is a Telegram bot for the Neptune Privacy (XNT) community.
 
-Blockchain data integration is intentionally not implemented. The live explorer API and
-node identity must pass the verification gate documented in
-[`docs/implementation-plan.md`](docs/implementation-plan.md) before any statistics
-command is added.
+## Commands
+
+| Command                       | What it shows                                                                                       | Source                  |
+| ----------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------- |
+| `/stats` (alias `/hashrate`)  | 7-day hashrate chart, hashrate with 24h and 7d change, difficulty, block height, circulating supply | NeptuneScan API         |
+| `/price` (alias `/marketcap`) | 7-day price chart, price with 24h change, circulating supply, market cap, exchange buttons          | CoinGecko + NeptuneScan |
+| `/mining`                     | How to start mining, with links to `xnt-gpu-miner` and `xnt-core`                                   | Static                  |
+| `/links`                      | Official ecosystem links                                                                            | Static                  |
+| `/start`, `/help`, `/about`   | Onboarding                                                                                          | Static                  |
+
+Replies use Telegram HTML formatting. Charts are drawn as SVG and rendered to
+PNG with [`@resvg/resvg-js`](https://github.com/yisibl/resvg-js) using the
+bundled Inter font (`assets/fonts`, SIL Open Font License), so rendering does
+not depend on fonts installed on the host or on any third-party chart service.
+`/start` sends a welcome banner built from the official Neptune Privacy logo
+(`assets/brand/neptune-logo.svg`, from `https://neptune.io/neptunelogo.svg`).
+
+Complete replies are cached for 3 minutes; if a source fails, the reply shows
+what is available, marks the rest `n/a`, and is retried after 20 seconds. See
+[`docs/data-sources.md`](docs/data-sources.md) for exactly how each value is
+obtained and what has been verified.
 
 ## Requirements
 
@@ -45,5 +61,6 @@ npm run format:check
 
 ## Project boundaries
 
-The current phase does not include live blockchain statistics, guessed API/RPC URLs,
-wallets, transactions, PostgreSQL, Redis, WebSockets, or chart rendering.
+The bot is read-only. It does not handle wallets, keys or transactions, and it
+does not publish emission schedules or tokenomics that have not been verified
+against the live network.

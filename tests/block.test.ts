@@ -1,15 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBlockHandler, parseBlockHeight } from '../src/bot/commands.js';
-import {
-  BlockLookupError,
-  NeptuneScanProvider,
-  type FetchLike,
-  type NeptuneDataProvider,
-} from '../src/neptune/provider.js';
-
-function context(match?: string): { match?: string; reply: ReturnType<typeof vi.fn> } {
-  return { match, reply: vi.fn().mockResolvedValue(undefined) };
-}
+import { UpstreamError, NeptuneScanProvider, type FetchLike } from '../src/neptune/provider.js';
 
 function response(body: unknown, status = 200): Response {
   return {
@@ -19,40 +9,7 @@ function response(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
-describe('block lookup', () => {
-  it('accepts only non-negative safe integer heights', () => {
-    expect(parseBlockHeight('92031')).toBe(92031);
-    expect(parseBlockHeight(undefined)).toBeUndefined();
-    expect(parseBlockHeight('-1')).toBeUndefined();
-    expect(parseBlockHeight('1.5')).toBeUndefined();
-    expect(parseBlockHeight('9007199254740992')).toBeUndefined();
-  });
-
-  it('formats a valid block without changing large numeric strings', async () => {
-    const provider: NeptuneDataProvider = {
-      getBlock: vi.fn().mockResolvedValue({
-        height: 92031,
-        hash: 'block-hash',
-        timestamp: '2026-10-12T12:00:00Z',
-        target: '18446744073709551616',
-        isCanonical: true,
-      }),
-    };
-    const ctx = context('92031');
-
-    await createBlockHandler(provider)(ctx);
-
-    expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(
-      [
-        'Block height: 92031',
-        'Hash: block-hash',
-        'Timestamp: 2026-10-12T12:00:00Z',
-        'Target: 18446744073709551616',
-        'Canonical: yes',
-      ].join('\n'),
-    );
-  });
-
+describe('NeptuneScanProvider block detail', () => {
   it('validates and maps a successful explorer response', async () => {
     const fetcher: FetchLike = vi.fn().mockResolvedValue(
       response({
@@ -81,21 +38,6 @@ describe('block lookup', () => {
     );
   });
 
-  it.each(['-1', '1.5', '9007199254740992', '123 abc'])(
-    'returns a helpful usage message for invalid argument %s',
-    async (argument) => {
-      const provider: NeptuneDataProvider = { getBlock: vi.fn() };
-      const ctx = context(argument);
-
-      await createBlockHandler(provider)(ctx);
-
-      expect(provider.getBlock).not.toHaveBeenCalled();
-      expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(
-        'Usage: /block <non-negative integer height>',
-      );
-    },
-  );
-
   it.each([
     ['API failure', { success: false, message: 'not ready' }],
     ['invalid response schema', { success: true, detail: {} }],
@@ -103,7 +45,7 @@ describe('block lookup', () => {
     const fetcher: FetchLike = vi.fn().mockResolvedValue(response(body));
     const provider = new NeptuneScanProvider('https://api.neptunescan.io', fetcher);
 
-    await expect(provider.getBlock(92031)).rejects.toBeInstanceOf(BlockLookupError);
+    await expect(provider.getBlock(92031)).rejects.toBeInstanceOf(UpstreamError);
   });
 
   it('rejects a response for a different block height', async () => {

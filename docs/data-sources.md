@@ -30,6 +30,76 @@ API-subdomain Swagger endpoint was separately observed to work; these
 host-specific observations must not be generalized across hosts. Live network
 identity, base-unit conversion, and data freshness remain unverified.
 
+## Live verification for `/stats` and `/price` (2026-10-12)
+
+Checked in a browser on the live explorer at about 16:25 UTC.
+
+- **The live explorer frontend calls `https://api.neptunescan.io`.** Its
+  bundled client contains that base URL, and on load it requests
+  `/api/overview`, `/api/blocks?page=0&page_size=5`, `/api/tx/list` and
+  `/api/utxo/list` on that host.
+- **`/api/overview` returns a fully populated `overview` with
+  `success: false`.** The explorer UI displays these values anyway:
+  `network_speed_24h` 1147874360 was shown as "Network Hashrate 1.1479 G/s",
+  `proof_target` as "Difficulty", and `total_reward` as "Circulating Supply
+  2,504,042.7844 XNT". The bot therefore validates the payload fields rather
+  than the `success` flag.
+- **Coin amounts use 10^30 base units per XNT.** This is confirmed by the
+  `total_reward` to UI match above, and by block 0's coinbase
+  (1942384 × 10^30), which equals the xnt-core premine.
+- **The explorer's "circulating supply" is the sum of all coinbase rewards**
+  (`total_reward`), including the premine. Whether time-locked coinbase
+  outputs should be excluded has not been verified. CoinGecko reported a
+  different circulating supply (2,339,293) at the same time; the bot uses
+  NeptuneScan's on-chain figure and says so.
+- **Block 0 matches xnt-core mainnet.** `/api/block/0` returned hash
+  `3b012c9a…5922b5a4`, identical to the xnt-core source genesis digest, with
+  time `2025-11-28T00:00:00Z` (the source launch timestamp) and target
+  `100000000` (the source genesis difficulty).
+- **`/api/rpc/block/{height}` returns `cumulative_proof_of_work`,
+  `difficulty`, `time` (UTC) and `is_canonical`.** Recomputing
+  `(cpow[h] − cpow[h−144]) / (time[h] − time[h−144])` for the tip gave
+  1147871355 against the overview's 1147874360 (a 0.0003% rounding
+  difference). The bot uses this formula for the current hashrate and for
+  the windows ending about 24 h and 7 d earlier.
+- **`/api/blocks` pages start at `page=0`.** `count` (92052) exceeded the
+  tip height plus one, so it is not used as a height. Block `fee` values
+  showed float-like artefacts and are not displayed.
+- **CoinGecko coin id `neptune-privacy`** (symbol `xnt`) links to
+  `https://neptune.io/` and `https://neptunescan.io/`. Its tickers were MEXC
+  and SafeTrade. The bot uses the keyless public endpoint
+  `/api/v3/simple/price?ids=neptune-privacy&vs_currencies=usd&include_24hr_change=true`,
+  which is rate-limited, so prices are cached for 60 seconds.
+- **`/mining` links to `github.com/neptuneprivacy/xnt-gpu-miner`.** Its
+  README describes a CUDA solo miner that needs an NVIDIA GPU, an xnt-core
+  node with JSON-RPC enabled, and a wallet address.
+
+Still unverified: the xnt-core revision the explorer's node runs, ingestion
+lag, rate limits, and whether "hashrate" (cumulative-work rate) equals raw
+hashes per second for the TIP5 proof of work.
+
+## Chart and exchange data (2026-10-12)
+
+- **Hashrate chart.** The bot pages through `/api/blocks?page={n}&page_size=100`
+  (newest first; the explorer caps `page_size` at 100) until it has 7 days plus
+  144 blocks, about 22 requests. The difficulties of 144 consecutive blocks
+  summed to exactly the `/api/rpc/block` cumulative-work delta for the same
+  range, so the rolling sum reproduces NeptuneScan's `network_speed_24h`
+  without per-block RPC calls. A live pull of 2,400 blocks had no height gaps.
+  The bot rejects lists with gaps and de-duplicates blocks that shift between
+  pages.
+- **24h and 7d change** compare the latest 144-block rate with the rate
+  nearest to 24 h and 7 d earlier (within 3 h, otherwise shown as `n/a`).
+- **Price chart.** CoinGecko
+  `/api/v3/coins/neptune-privacy/market_chart?vs_currency=usd&days=7` returned
+  169 hourly points.
+- **Exchanges.** CoinGecko's `neptune-privacy` tickers listed MEXC
+  (`https://www.mexc.com/exchange/XNT_USDT`) and SafeTrade
+  (`https://safetrade.com/exchange/XNT-USDT`), both XNT/USDT and neither
+  flagged stale or anomalous. The official site `https://neptune.io/` lists
+  the same two exchanges (MEXC and Safetrade). These links are static in `src/bot/links.ts`
+  and must be re-checked when listings change.
+
 ## Explorer frontend to backend trace
 
 The frontend functions in `frontend/src/utils/api/apis.ts` use Axios with a

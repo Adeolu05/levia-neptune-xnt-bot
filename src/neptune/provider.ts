@@ -1,4 +1,15 @@
 import { z } from 'zod';
+import { getJson, UpstreamError, type FetchLike } from '../http.js';
+import { isIntegerString } from './units.js';
+
+export { UpstreamError, type FetchLike } from '../http.js';
+
+const integerString = z.string().refine(isIntegerString, 'Expected a non-negative integer string');
+
+const failureSchema = z.object({
+  success: z.literal(false),
+  message: z.string().optional(),
+});
 
 const blockResponseSchema = z.object({
   success: z.literal(true),
@@ -11,9 +22,31 @@ const blockResponseSchema = z.object({
   }),
 });
 
-const blockFailureSchema = z.object({
-  success: z.literal(false),
-  message: z.string().optional(),
+/**
+ * Observed on 2026-10-12: `/api/overview` returns a fully populated `overview`
+ * object together with `success: false`, and the live explorer UI displays
+ * those values regardless. The payload is therefore validated on its own
+ * fields rather than on the `success` flag.
+ */
+const overviewResponseSchema = z.object({
+  overview: z.object({
+    height: z.number().int().nonnegative(),
+    proof_target: integerString,
+    total_reward: integerString,
+    network_speed_24h: integerString,
+    average_block_time: z.number().positive(),
+  }),
+});
+
+const blocksPageSchema = z.object({
+  success: z.literal(true),
+  blocks: z.array(
+    z.object({
+      block: z.number().int().nonnegative(),
+      proof_target: integerString,
+      time: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid timestamp'),
+    }),
+  ),
 });
 
 export type BlockDetails = {
@@ -24,26 +57,52 @@ export type BlockDetails = {
   isCanonical: boolean;
 };
 
+export type NetworkOverview = {
+  height: number;
+  /** Difficulty of the latest indexed block. */
+  difficulty: bigint;
+  /** Explorer "circulating supply": the sum of all coinbase rewards, in base units. */
+  circulatingSupplyBaseUnits: bigint;
+  averageBlockTimeSeconds: number;
+};
+
+/** A canonical block from the explorer's block list. */
+export type BlockSummary = {
+  height: number;
+  /** Proof-of-work difficulty (approximate number of hashes needed to find the block). */
+  difficulty: bigint;
+  timeMs: number;
+};
+
 export type NeptuneDataProvider = {
   getBlock(height: number): Promise<BlockDetails>;
 };
 
-export class BlockLookupError extends Error {
-  public constructor(
-    message: string,
-    public readonly reason: 'timeout' | 'network' | 'http' | 'invalid-json' | 'api' | 'schema',
-  ) {
-    super(message);
-    this.name = 'BlockLookupError';
-  }
+export type NetworkStatsSource = {
+  getOverview(): Promise<NetworkOverview>;
+  /** Canonical blocks, newest first. Page 0 is the latest page. */
+  getBlocksPage(page: number, pageSize: number): Promise<BlockSummary[]>;
+};
+
+/** Maximum page size accepted by NeptuneScan's `/api/blocks` route. */
+export const MAX_BLOCKS_PAGE_SIZE = 100;
+
+function apiFailure(body: unknown, fallback: string): UpstreamError | undefined {
+  const failure = failureSchema.safeParse(body);
+  return failure.success
+    ? new UpstreamError(failure.data.message || fallback, 'api', 'neptunescan')
+    : undefined;
 }
 
-export type FetchLike = (
-  input: string,
-  init?: RequestInit,
-) => Promise<Pick<Response, 'ok' | 'status' | 'json'>>;
+function schemaError(what: string): UpstreamError {
+  return new UpstreamError(
+    `The explorer returned an invalid ${what} response.`,
+    'schema',
+    'neptunescan',
+  );
+}
 
-export class NeptuneScanProvider implements NeptuneDataProvider {
+export class NeptuneScanProvider implements NeptuneDataProvider, NetworkStatsSource {
   private readonly baseUrl: string;
 
   public constructor(
@@ -54,57 +113,75 @@ export class NeptuneScanProvider implements NeptuneDataProvider {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
   }
 
+  private request(path: string): Promise<unknown> {
+    return getJson(`${this.baseUrl}${path}`, {
+      fetcher: this.fetcher,
+      timeoutMs: this.timeoutMs,
+      service: 'neptunescan',
+    });
+  }
+
   public async getBlock(height: number): Promise<BlockDetails> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await this.fetcher(`${this.baseUrl}/api/block/${height}`, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: { accept: 'application/json' },
-      });
-      if (!response.ok) {
-        throw new BlockLookupError(`The explorer returned HTTP ${response.status}.`, 'http');
-      }
-
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        throw new BlockLookupError('The explorer returned invalid JSON.', 'invalid-json');
-      }
-
-      const failure = blockFailureSchema.safeParse(body);
-      if (failure.success) {
-        throw new BlockLookupError(
-          failure.data.message ?? 'The explorer could not find that block.',
-          'api',
-        );
-      }
-
-      const parsed = blockResponseSchema.safeParse(body);
-      if (!parsed.success || parsed.data.detail.block !== height) {
-        throw new BlockLookupError('The explorer returned an invalid block response.', 'schema');
-      }
-
-      return {
-        height: parsed.data.detail.block,
-        hash: parsed.data.detail.block_hash,
-        timestamp: parsed.data.detail.time,
-        target: parsed.data.detail.target,
-        isCanonical: parsed.data.detail.is_canonical,
-      };
-    } catch (error) {
-      if (error instanceof BlockLookupError) {
-        throw error;
-      }
-      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-        throw new BlockLookupError('The explorer request timed out.', 'timeout');
-      }
-      throw new BlockLookupError('The explorer request failed.', 'network');
-    } finally {
-      clearTimeout(timeout);
+    const body = await this.request(`/api/block/${height}`);
+    const failure = apiFailure(body, 'The explorer could not find that block.');
+    if (failure) {
+      throw failure;
     }
+
+    const parsed = blockResponseSchema.safeParse(body);
+    if (!parsed.success || parsed.data.detail.block !== height) {
+      throw schemaError('block');
+    }
+
+    return {
+      height: parsed.data.detail.block,
+      hash: parsed.data.detail.block_hash,
+      timestamp: parsed.data.detail.time,
+      target: parsed.data.detail.target,
+      isCanonical: parsed.data.detail.is_canonical,
+    };
+  }
+
+  public async getOverview(): Promise<NetworkOverview> {
+    const body = await this.request('/api/overview');
+    const parsed = overviewResponseSchema.safeParse(body);
+    if (!parsed.success) {
+      const hasPayload = typeof body === 'object' && body !== null && 'overview' in body;
+      throw hasPayload
+        ? schemaError('overview')
+        : (apiFailure(body, 'The explorer overview is unavailable.') ?? schemaError('overview'));
+    }
+
+    const { overview } = parsed.data;
+    return {
+      height: overview.height,
+      difficulty: BigInt(overview.proof_target),
+      circulatingSupplyBaseUnits: BigInt(overview.total_reward),
+      averageBlockTimeSeconds: overview.average_block_time,
+    };
+  }
+
+  public async getBlocksPage(page: number, pageSize: number): Promise<BlockSummary[]> {
+    if (!Number.isSafeInteger(page) || page < 0) {
+      throw new RangeError('page must be a non-negative integer');
+    }
+    if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > MAX_BLOCKS_PAGE_SIZE) {
+      throw new RangeError(`pageSize must be between 1 and ${MAX_BLOCKS_PAGE_SIZE}`);
+    }
+    const body = await this.request(`/api/blocks?page=${page}&page_size=${pageSize}`);
+    const failure = apiFailure(body, 'The explorer could not list blocks.');
+    if (failure) {
+      throw failure;
+    }
+
+    const parsed = blocksPageSchema.safeParse(body);
+    if (!parsed.success) {
+      throw schemaError('block list');
+    }
+    return parsed.data.blocks.map((block) => ({
+      height: block.block,
+      difficulty: BigInt(block.proof_target),
+      timeMs: Date.parse(block.time),
+    }));
   }
 }

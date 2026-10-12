@@ -1,59 +1,100 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleAbout, handleHelp, handleStart } from '../src/bot/commands.js';
-import { START_MESSAGE } from '../src/bot/messages.js';
+import { createStartHandler, handleAbout, handleHelp } from '../src/bot/commands.js';
+import { ABOUT_MESSAGE, HELP_MESSAGE, START_MESSAGE } from '../src/bot/messages.js';
+import { TELEGRAM_COMMANDS } from '../src/bot/create-bot.js';
+import { LINKS_MESSAGE } from '../src/bot/links.js';
+import { MINING_MESSAGE } from '../src/bot/messages.js';
+import { formatMarketCaption, formatNetworkCaption } from '../src/bot/reports.js';
 
 function context(): { reply: ReturnType<typeof vi.fn> } {
   return { reply: vi.fn().mockResolvedValue(undefined) };
 }
 
-describe('command handlers', () => {
+describe('static command handlers', () => {
   it.each([
-    ['/start', handleStart, START_MESSAGE],
-    [
-      '/help',
-      handleHelp,
-      [
-        'Available commands:',
-        '/start - Show a welcome message',
-        '/help - Show this help message',
-        '/about - Learn about this bot',
-        '/block <height> - Look up a block',
-        '/links - Show official ecosystem links',
-      ].join('\n'),
-    ],
-    [
-      '/about',
-      handleAbout,
-      [
-        'This open-source bot is being built for the Neptune Privacy ecosystem.',
-        'Live blockchain data will only be added after its sources and network identity are verified.',
-      ].join('\n'),
-    ],
-  ])('%s replies with its exact message', async (_command, handler, message) => {
+    ['/help', handleHelp, HELP_MESSAGE],
+    ['/about', handleAbout, ABOUT_MESSAGE],
+  ])('%s replies with HTML formatting', async (_command, handler, message) => {
     const ctx = context();
     await handler(ctx);
-    expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(message);
+    expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(message, { parse_mode: 'HTML' });
   });
 
-  it('/start describes current capabilities without the outdated message', async () => {
-    const ctx = context();
-
-    await handleStart(ctx);
-
-    expect(ctx.reply).toHaveBeenCalledWith(START_MESSAGE);
-    expect(START_MESSAGE).toContain('block lookups');
-    expect(START_MESSAGE).toContain('/help');
-    expect(START_MESSAGE).toContain('/links');
-    expect(START_MESSAGE).not.toContain('Blockchain statistics are not connected yet.');
+  it('/help lists every public command and no longer lists /block', () => {
+    for (const command of ['/stats', '/price', '/mining', '/links', '/about', '/help']) {
+      expect(HELP_MESSAGE).toContain(command);
+    }
+    expect(HELP_MESSAGE).not.toContain('/block');
+    expect(START_MESSAGE).not.toContain('/block');
   });
 
-  it('/help lists /links', async () => {
-    const ctx = context();
+  it('registers the Telegram menu without /block', () => {
+    const commands = TELEGRAM_COMMANDS.map((entry) => entry.command);
+    expect(commands).toEqual(['stats', 'price', 'mining', 'links', 'help', 'about', 'start']);
+  });
 
-    await handleHelp(ctx);
+  it('keeps static HTML messages free of unescaped angle brackets outside tags', () => {
+    for (const message of [START_MESSAGE, HELP_MESSAGE, ABOUT_MESSAGE]) {
+      expect(message.replace(/<\/?[bi]>/g, '')).not.toMatch(/[<>]/);
+    }
+  });
 
-    expect(ctx.reply).toHaveBeenCalledWith(
-      expect.stringContaining('/links - Show official ecosystem links'),
-    );
+  it('/start sends the welcome banner with the welcome caption, then reuses file_id', async () => {
+    const banner = new Uint8Array([137, 80, 78, 71]);
+    const getBanner = vi.fn().mockReturnValue(banner);
+    const ctx = {
+      reply: vi.fn(),
+      replyWithPhoto: vi
+        .fn()
+        .mockResolvedValue({ photo: [{ file_id: 'small' }, { file_id: 'large' }] }),
+    };
+    const handler = createStartHandler(getBanner);
+
+    await handler(ctx as never);
+    await handler(ctx as never);
+
+    expect(ctx.replyWithPhoto).toHaveBeenNthCalledWith(1, expect.anything(), {
+      caption: START_MESSAGE,
+      parse_mode: 'HTML',
+    });
+    expect(ctx.replyWithPhoto).toHaveBeenNthCalledWith(2, 'large', expect.anything());
+    expect(getBanner).toHaveBeenCalledOnce();
+    expect(ctx.reply).not.toHaveBeenCalled();
+  });
+
+  it('/start falls back to text when the banner fails', async () => {
+    const onError = vi.fn();
+    const ctx = { reply: vi.fn(), replyWithPhoto: vi.fn() };
+    const handler = createStartHandler(() => {
+      throw new Error('render failed');
+    }, onError);
+
+    await handler(ctx as never);
+
+    expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(START_MESSAGE, { parse_mode: 'HTML' });
+    expect(onError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it('uses no em or en dashes in any user-facing message', () => {
+    const captions = [
+      formatMarketCaption(undefined, undefined),
+      formatNetworkCaption({
+        height: 1,
+        difficulty: 1n,
+        circulatingSupplyBaseUnits: 0n,
+        hashrate: 1n,
+        history: [],
+      }),
+    ];
+    for (const message of [
+      START_MESSAGE,
+      HELP_MESSAGE,
+      ABOUT_MESSAGE,
+      MINING_MESSAGE,
+      LINKS_MESSAGE,
+      ...captions,
+    ]) {
+      expect(message).not.toMatch(/[\u2013\u2014]/);
+    }
   });
 });
