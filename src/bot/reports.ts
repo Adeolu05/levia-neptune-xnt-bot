@@ -60,7 +60,6 @@ export function formatNetworkCaption(report: NetworkReport): string {
     `${changeLabel('24h', hashrateChange(report.hashrate, report.hashrate24hAgo))}   ${changeLabel('7d', hashrateChange(report.hashrate, report.hashrate7dAgo))}`,
     `🎯 <b>Difficulty:</b> ${formatInteger(report.difficulty)}`,
     `🧱 <b>Block height:</b> ${formatInteger(BigInt(report.height))}`,
-    `🪙 <b>Circulating supply:</b> ${formatXnt(report.circulatingSupplyBaseUnits, 2)}`,
     '',
     '<i>Source: NeptuneScan · hashrate is a 144-block average</i>',
   ].join('\n');
@@ -69,6 +68,7 @@ export function formatNetworkCaption(report: NetworkReport): string {
 export function formatMarketCaption(
   price: MarketPrice | undefined,
   overview: NetworkOverview | undefined,
+  change7d?: string,
 ): string {
   const change =
     price?.change24hPercent === undefined ? undefined : formatSignedPercent(price.change24hPercent);
@@ -81,11 +81,11 @@ export function formatMarketCaption(
     '💎 <b>XNT Market</b>',
     '',
     `💵 <b>Price:</b> ${price === undefined ? UNAVAILABLE : formatUsd(price.usd)}`,
-    changeLabel('24h', change),
+    `${changeLabel('24h', change)}   ${changeLabel('7d', change7d)}`,
     `🪙 <b>Circulating supply:</b> ${overview === undefined ? UNAVAILABLE : formatXnt(overview.circulatingSupplyBaseUnits, 2)}`,
     `🏦 <b>Market cap:</b> ${marketCap}`,
     '',
-    '🛒 Buy XNT on the exchanges below. Always check the pair is <b>XNT/USDT</b>.',
-    '<i>Price: CoinGecko · Supply: NeptuneScan · Not financial advice</i>',
+    '🛒 XNT is available on the exchanges below.',
+    '<i>Price: CoinGecko · Supply: NeptuneScan</i>',
   ].join('\n');
 }

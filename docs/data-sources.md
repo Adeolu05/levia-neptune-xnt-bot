@@ -95,10 +95,19 @@ hashes per second for the TIP5 proof of work.
   169 hourly points.
 - **Exchanges.** CoinGecko's `neptune-privacy` tickers listed MEXC
   (`https://www.mexc.com/exchange/XNT_USDT`) and SafeTrade
-  (`https://safetrade.com/exchange/XNT-USDT`), both XNT/USDT and neither
+  (`https://safetrade.com/exchange/XNT-USDT?type=basic`, the URL neptune.io uses), both XNT/USDT and neither
   flagged stale or anomalous. The official site `https://neptune.io/` lists
   the same two exchanges (MEXC and Safetrade). These links are static in `src/bot/links.ts`
   and must be re-checked when listings change.
+
+## Official links (2026-10-12)
+
+Every `/links` button matches a link on `https://neptune.io/`: the website,
+`/learn`, `/news-blogs`, `https://neptunescan.io/`, X (`NeptunePrivacy`),
+Telegram (`t.me/neptuneprivacy`), Discord (`discord.com/invite/neptuneprivacy`),
+Reddit (`r/neptuneprivacy`), GitHub (`github.com/neptuneprivacy`), and the
+Neptune Wallet listings on the App Store and Google Play. A test restricts
+link buttons to HTTPS URLs on these hosts.
 
 ## Explorer frontend to backend trace
 

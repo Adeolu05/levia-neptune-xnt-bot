@@ -4,13 +4,13 @@ Levia is a Telegram bot for the Neptune Privacy (XNT) community.
 
 ## Commands
 
-| Command                       | What it shows                                                                                       | Source                  |
-| ----------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------- |
-| `/stats` (alias `/hashrate`)  | 7-day hashrate chart, hashrate with 24h and 7d change, difficulty, block height, circulating supply | NeptuneScan API         |
-| `/price` (alias `/marketcap`) | 7-day price chart, price with 24h change, circulating supply, market cap, exchange buttons          | CoinGecko + NeptuneScan |
-| `/mining`                     | How to start mining, with links to `xnt-gpu-miner` and `xnt-core`                                   | Static                  |
-| `/links`                      | Official ecosystem links                                                                            | Static                  |
-| `/start`, `/help`, `/about`   | Onboarding                                                                                          | Static                  |
+| Command                       | What it shows                                                                                                             | Source                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `/stats` (alias `/hashrate`)  | 7-day hashrate chart, hashrate with 24h and 7d change, difficulty and block height                                        | NeptuneScan API             |
+| `/price` (alias `/marketcap`) | 7-day price chart, price with 24h and 7d change, circulating supply, market cap, exchange buttons                         | CoinGecko + NeptuneScan     |
+| `/mining`                     | How to start mining, with links to `xnt-gpu-miner` and `xnt-core`                                                         | Static                      |
+| `/links`                      | Resources banner with buttons for the website, explorer, guides, news, Neptune Wallet apps, community channels and GitHub | Static (matches neptune.io) |
+| `/start`, `/help`, `/about`   | Onboarding                                                                                                                | Static                      |
 
 Replies use Telegram HTML formatting. Charts are drawn as SVG and rendered to
 PNG with [`@resvg/resvg-js`](https://github.com/yisibl/resvg-js) using the

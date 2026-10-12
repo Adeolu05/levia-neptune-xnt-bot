@@ -18,7 +18,6 @@ const OVERVIEW: NetworkOverview = {
 const REPORT: NetworkReport = {
   height: 92051,
   difficulty: 271865533734n,
-  circulatingSupplyBaseUnits: SUPPLY,
   hashrate: 1147871355n,
   hashrate24hAgo: 1330253150n,
   hashrate7dAgo: 964924625n,
@@ -51,7 +50,6 @@ describe('captions', () => {
         '🔴 <b>24h:</b> -13.71%   🟢 <b>7d:</b> +18.96%',
         '🎯 <b>Difficulty:</b> 271,865,533,734',
         '🧱 <b>Block height:</b> 92,051',
-        '🪙 <b>Circulating supply:</b> 2,504,042.78 XNT',
         '',
         '<i>Source: NeptuneScan · hashrate is a 144-block average</i>',
       ].join('\n'),
@@ -68,17 +66,17 @@ describe('captions', () => {
   });
 
   it('formats price, supply and market cap together', () => {
-    expect(formatMarketCaption(PRICE, OVERVIEW)).toBe(
+    expect(formatMarketCaption(PRICE, OVERVIEW, '+122.62%')).toBe(
       [
         '💎 <b>XNT Market</b>',
         '',
         '💵 <b>Price:</b> $0.6541',
-        '🟢 <b>24h:</b> +50.75%',
+        '🟢 <b>24h:</b> +50.75%   🟢 <b>7d:</b> +122.62%',
         '🪙 <b>Circulating supply:</b> 2,504,042.78 XNT',
         '🏦 <b>Market cap:</b> $1,637,942',
         '',
-        '🛒 Buy XNT on the exchanges below. Always check the pair is <b>XNT/USDT</b>.',
-        '<i>Price: CoinGecko · Supply: NeptuneScan · Not financial advice</i>',
+        '🛒 XNT is available on the exchanges below.',
+        '<i>Price: CoinGecko · Supply: NeptuneScan</i>',
       ].join('\n'),
     );
   });
@@ -128,6 +126,8 @@ describe('buildPriceReply', () => {
 
     expect(reply.photo).toBe(PNG);
     expect(reply.complete).toBe(true);
+    expect(reply.text).toContain('🟢 <b>7d:</b> +122.62%');
+    expect(reply.text).not.toMatch(/financial advice/i);
     expect(render).toHaveBeenCalledWith(
       expect.objectContaining({
         value: '$0.6541',
@@ -166,6 +166,7 @@ describe('buildPriceReply', () => {
     expect(reply.photo).toBeUndefined();
     expect(render).not.toHaveBeenCalled();
     expect(reply.text).toContain('$1,637,942');
+    expect(reply.text).toContain('⚪ <b>7d:</b> n/a');
   });
 
   it('fails when both price and supply are unavailable', async () => {

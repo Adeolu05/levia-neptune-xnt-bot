@@ -1,23 +1,23 @@
 import { Bot, type Context } from 'grammy';
 import { cached } from '../cache.js';
-import { getWelcomeBannerPng } from '../charts/welcome-banner.js';
+import { getLinksBannerPng, getWelcomeBannerPng } from '../charts/welcome-banner.js';
 import type { AppConfig } from '../config.js';
 import type { Logger } from '../logger.js';
 import { CoinGeckoPriceProvider } from '../market/coingecko.js';
 import { getNetworkReport, HISTORY_DAYS } from '../neptune/network-stats.js';
 import { NeptuneScanProvider } from '../neptune/provider.js';
 import {
+  createLinksHandler,
   createReplyHandler,
   createStartHandler,
   handleAbout,
   handleHelp,
-  handleLinks,
   handleMining,
 } from './commands.js';
 import { buildPriceReply, buildStatsReply, renderChartPng, type BotReply } from './replies.js';
 
 export const TELEGRAM_COMMANDS = [
-  { command: 'stats', description: 'Hashrate, supply and a 7-day chart' },
+  { command: 'stats', description: 'Hashrate, difficulty and a 7-day chart' },
   { command: 'price', description: 'Price, market cap and where to buy' },
   { command: 'mining', description: 'How to start mining XNT' },
   { command: 'links', description: 'Official ecosystem links' },
@@ -64,12 +64,10 @@ export function createBot(config: AppConfig, logger: Logger): Bot<Context> {
     replyTtl,
   );
 
-  bot.command(
-    'start',
-    createStartHandler(getWelcomeBannerPng, (error) =>
-      logger.warn('Welcome banner failed', { error: describeError(error) }),
-    ),
-  );
+  const onBannerError = (error: unknown): void =>
+    logger.warn('Banner image failed', { error: describeError(error) });
+
+  bot.command('start', createStartHandler(getWelcomeBannerPng, onBannerError));
   bot.command('help', handleHelp);
   bot.command('about', handleAbout);
   bot.command(
@@ -81,7 +79,7 @@ export function createBot(config: AppConfig, logger: Logger): Bot<Context> {
     createReplyHandler(getPriceReply, 'I could not load XNT market data right now.'),
   );
   bot.command('mining', handleMining);
-  bot.command('links', handleLinks);
+  bot.command('links', createLinksHandler(getLinksBannerPng, onBannerError));
 
   bot.catch((error) => {
     logger.error('Telegram update failed', {

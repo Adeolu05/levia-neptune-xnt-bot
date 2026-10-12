@@ -7,9 +7,10 @@ import {
 } from '../src/charts/line-chart.js';
 import { svgToPng } from '../src/charts/render.js';
 import {
+  getLinksBannerPng,
   getWelcomeBannerPng,
   logoMarkup,
-  renderWelcomeBannerSvg,
+  renderBannerSvg,
 } from '../src/charts/welcome-banner.js';
 
 const DAY = 86_400_000;
@@ -73,9 +74,13 @@ describe('line chart', () => {
 
 describe('welcome banner', () => {
   it('embeds the logo markup and command chips', () => {
-    const svg = renderWelcomeBannerSvg('<svg viewBox="0 0 1 1"><rect id="logo"/></svg>', [
-      '/stats',
-    ]);
+    const svg = renderBannerSvg('<svg viewBox="0 0 1 1"><rect id="logo"/></svg>', {
+      eyebrow: 'EYEBROW',
+      title: 'Levia',
+      subtitle: 'Sub & title',
+      chips: ['/stats'],
+    });
+    expect(svg).toContain('Sub &amp; title');
     expect(svg).toContain('<rect id="logo"/>');
     expect(svg).toContain('Levia');
     expect(svg).toContain('/stats');
@@ -89,5 +94,6 @@ describe('welcome banner', () => {
     const png = getWelcomeBannerPng();
     expect([...png.slice(0, 4)]).toEqual([137, 80, 78, 71]);
     expect(getWelcomeBannerPng()).toBe(png);
+    expect(getLinksBannerPng()).not.toBe(png);
   });
 });

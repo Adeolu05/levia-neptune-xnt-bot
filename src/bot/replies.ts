@@ -71,13 +71,22 @@ export function hashrateChartOptions(report: NetworkReport): LineChartOptions {
   };
 }
 
+/** Percentage change from the first to the last point of a price history. */
+export function priceHistoryChange(history: PricePoint[]): string | undefined {
+  const first = history[0];
+  const last = history.at(-1);
+  if (first === undefined || last === undefined || history.length < 2) {
+    return undefined;
+  }
+  return formatSignedPercent(((last.usd - first.usd) / first.usd) * 100);
+}
+
 export function priceChartOptions(
   price: MarketPrice | undefined,
   history: PricePoint[],
 ): LineChartOptions {
-  const first = history[0] as PricePoint;
   const last = history.at(-1) as PricePoint;
-  const change = formatSignedPercent(((last.usd - first.usd) / first.usd) * 100);
+  const change = priceHistoryChange(history) ?? '0.00%';
   const direction = directionOf(change);
   return {
     title: `XNT / USD · ${HISTORY_DAYS}D`,
@@ -147,6 +156,7 @@ export async function buildPriceReply(
     text: formatMarketCaption(
       priceValue,
       overview.status === 'fulfilled' ? overview.value : undefined,
+      history.status === 'fulfilled' ? priceHistoryChange(history.value) : undefined,
     ),
     photo,
     keyboard: createMarketKeyboard(),

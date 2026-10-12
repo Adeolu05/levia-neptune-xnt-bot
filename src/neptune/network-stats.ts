@@ -1,5 +1,8 @@
 import { MAX_BLOCKS_PAGE_SIZE, type BlockSummary, type NetworkStatsSource } from './provider.js';
 
+/** Hashrate only needs the explorer's block list. */
+export type BlocksSource = Pick<NetworkStatsSource, 'getBlocksPage'>;
+
 /** Same window NeptuneScan uses for its `network_speed_24h` figure. */
 export const HASHRATE_WINDOW_BLOCKS = 144;
 
@@ -23,7 +26,6 @@ export type HashratePoint = {
 export type NetworkReport = {
   height: number;
   difficulty: bigint;
-  circulatingSupplyBaseUnits: bigint;
   hashrate: bigint;
   hashrate24hAgo?: bigint | undefined;
   hashrate7dAgo?: bigint | undefined;
@@ -44,7 +46,7 @@ export class NetworkStatsError extends Error {
  * de-duplicated (a new block can shift pages between requests) and verified to
  * have no height gaps.
  */
-export async function loadRecentBlocks(source: NetworkStatsSource): Promise<BlockSummary[]> {
+export async function loadRecentBlocks(source: BlocksSource): Promise<BlockSummary[]> {
   const byHeight = new Map<number, BlockSummary>();
   let sinceMs: number | undefined;
 
@@ -144,8 +146,8 @@ function pointNear(points: HashratePoint[], targetMs: number): HashratePoint | u
     : undefined;
 }
 
-export async function getNetworkReport(source: NetworkStatsSource): Promise<NetworkReport> {
-  const [overview, blocks] = await Promise.all([source.getOverview(), loadRecentBlocks(source)]);
+export async function getNetworkReport(source: BlocksSource): Promise<NetworkReport> {
+  const blocks = await loadRecentBlocks(source);
   const points = rollingHashrate(blocks);
   const latest = points.at(-1);
   const tip = blocks.at(-1);
@@ -163,7 +165,6 @@ export async function getNetworkReport(source: NetworkStatsSource): Promise<Netw
   return {
     height: tip.height,
     difficulty: tip.difficulty,
-    circulatingSupplyBaseUnits: overview.circulatingSupplyBaseUnits,
     hashrate: latest.hashrate,
     hashrate24hAgo: pointNear(points, latest.timeMs - DAY_MS)?.hashrate,
     hashrate7dAgo: pointNear(points, historyStart)?.hashrate,

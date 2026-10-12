@@ -5,10 +5,10 @@ import {
   loadRecentBlocks,
   rollingHashrate,
 } from '../src/neptune/network-stats.js';
-import type { BlockSummary, NetworkStatsSource } from '../src/neptune/provider.js';
+import type { BlocksSource } from '../src/neptune/network-stats.js';
+import type { BlockSummary } from '../src/neptune/provider.js';
 
 const BLOCK_MS = 300_000;
-const SUPPLY = 2504042784368000000000000000000000000n;
 
 /**
  * Synthetic chain with a block every 300 s. Difficulty is 300e9 (1 GH/s)
@@ -22,15 +22,9 @@ function chain(tip: number, stepHeight: number): BlockSummary[] {
   }));
 }
 
-function source(blocks: BlockSummary[]): NetworkStatsSource {
+function source(blocks: BlockSummary[]): BlocksSource {
   const newestFirst = [...blocks].reverse();
   return {
-    getOverview: vi.fn().mockResolvedValue({
-      height: blocks.at(-1)?.height ?? 0,
-      difficulty: 1n,
-      circulatingSupplyBaseUnits: SUPPLY,
-      averageBlockTimeSeconds: 300,
-    }),
     getBlocksPage: vi.fn((page: number, size: number) =>
       Promise.resolve(newestFirst.slice(page * size, (page + 1) * size)),
     ),
@@ -95,7 +89,6 @@ describe('getNetworkReport', () => {
 
     expect(report.height).toBe(5000);
     expect(report.difficulty).toBe(600_000_000_000n);
-    expect(report.circulatingSupplyBaseUnits).toBe(SUPPLY);
     expect(report.hashrate).toBe(2_000_000_000n);
     expect(report.hashrate24hAgo).toBe(2_000_000_000n);
     expect(report.hashrate7dAgo).toBe(1_000_000_000n);

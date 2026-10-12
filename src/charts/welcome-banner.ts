@@ -21,14 +21,22 @@ export function logoMarkup(svg: string): string {
   return match[1].trim();
 }
 
-export function renderWelcomeBannerSvg(logoSvg: string, commands: string[]): string {
+export type BannerContent = {
+  eyebrow: string;
+  title: string;
+  titleSize?: number;
+  subtitle: string;
+  chips: string[];
+};
+
+export function renderBannerSvg(logoSvg: string, content: BannerContent): string {
   const logoSize = 300;
   const logoX = 100;
   const logoY = (BANNER_HEIGHT - logoSize) / 2;
   const textX = 470;
 
   let chipX = textX;
-  const chips = commands
+  const chips = content.chips
     .map((command) => {
       const width = 36 + command.length * 15;
       const chip =
@@ -50,25 +58,40 @@ export function renderWelcomeBannerSvg(logoSvg: string, commands: string[]): str
     `<rect width="${BANNER_WIDTH}" height="${BANNER_HEIGHT}" fill="url(#logoGlow)"/>`,
     `<rect width="${BANNER_WIDTH}" height="${BANNER_HEIGHT}" fill="url(#accentGlow)"/>`,
     `<g transform="translate(${logoX} ${logoY}) scale(${logoSize / LOGO_VIEWBOX})">${logoMarkup(logoSvg)}</g>`,
-    `<text x="${textX}" y="212" font-size="22" font-weight="600" fill="#9a9ab5" letter-spacing="4">NEPTUNE PRIVACY · COMMUNITY BOT</text>`,
-    `<text x="${textX - 4}" y="330" font-size="120" font-weight="700" fill="#f4f4fb" letter-spacing="-2">Levia</text>`,
-    `<text x="${textX}" y="388" font-size="30" fill="#b8b8d0">Network stats, XNT price and mining help</text>`,
+    `<text x="${textX}" y="212" font-size="22" font-weight="600" fill="#9a9ab5" letter-spacing="4">${escapeXml(content.eyebrow)}</text>`,
+    `<text x="${textX - 4}" y="330" font-size="${content.titleSize ?? 120}" font-weight="700" fill="#f4f4fb" letter-spacing="-2">${escapeXml(content.title)}</text>`,
+    `<text x="${textX}" y="388" font-size="30" fill="#b8b8d0">${escapeXml(content.subtitle)}</text>`,
     chips,
     '</svg>',
   ].join('');
 }
 
-let cachedBanner: Uint8Array | undefined;
+export const WELCOME_BANNER: BannerContent = {
+  eyebrow: 'NEPTUNE PRIVACY · COMMUNITY BOT',
+  title: 'Levia',
+  subtitle: 'Network stats, XNT price and mining help',
+  chips: ['/stats', '/price', '/mining', '/links'],
+};
 
-/** Renders the welcome banner once per process and reuses it. */
-export function getWelcomeBannerPng(): Uint8Array {
-  cachedBanner ??= svgToPng(
-    renderWelcomeBannerSvg(readFileSync(LOGO_PATH, 'utf8'), [
-      '/stats',
-      '/price',
-      '/mining',
-      '/links',
-    ]),
-  );
-  return cachedBanner;
+export const LINKS_BANNER: BannerContent = {
+  eyebrow: 'NEPTUNE PRIVACY · OFFICIAL LINKS',
+  title: 'Resources',
+  titleSize: 104,
+  subtitle: 'Website, wallet, community and code',
+  chips: ['neptune.io', 'neptunescan.io'],
+};
+
+const bannerCache = new Map<BannerContent, Uint8Array>();
+
+/** Renders a banner once per process and reuses it. */
+export function getBannerPng(content: BannerContent): Uint8Array {
+  let png = bannerCache.get(content);
+  if (png === undefined) {
+    png = svgToPng(renderBannerSvg(readFileSync(LOGO_PATH, 'utf8'), content));
+    bannerCache.set(content, png);
+  }
+  return png;
 }
+
+export const getWelcomeBannerPng = (): Uint8Array => getBannerPng(WELCOME_BANNER);
+export const getLinksBannerPng = (): Uint8Array => getBannerPng(LINKS_BANNER);

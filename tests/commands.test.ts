@@ -71,17 +71,20 @@ describe('static command handlers', () => {
 
     await handler(ctx as never);
 
-    expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(START_MESSAGE, { parse_mode: 'HTML' });
+    expect(ctx.reply).toHaveBeenCalledExactlyOnceWith(START_MESSAGE, {
+      parse_mode: 'HTML',
+      link_preview_options: { is_disabled: true },
+    });
     expect(onError).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it('uses no em or en dashes in any user-facing message', () => {
     const captions = [
       formatMarketCaption(undefined, undefined),
+      formatMarketCaption({ usd: 1, change24hPercent: 1 }, undefined, '+1.00%'),
       formatNetworkCaption({
         height: 1,
         difficulty: 1n,
-        circulatingSupplyBaseUnits: 0n,
         hashrate: 1n,
         history: [],
       }),
@@ -96,5 +99,15 @@ describe('static command handlers', () => {
     ]) {
       expect(message).not.toMatch(/[\u2013\u2014]/);
     }
+  });
+
+  it('/about no longer carries a financial-advice disclaimer', () => {
+    expect(ABOUT_MESSAGE).not.toMatch(/financial advice/i);
+  });
+
+  it('/stats does not repeat circulating supply (it is shown by /price)', () => {
+    const caption = formatNetworkCaption({ height: 1, difficulty: 1n, hashrate: 1n, history: [] });
+    expect(caption).not.toMatch(/supply/i);
+    expect(HELP_MESSAGE).toContain('/price · XNT price, supply');
   });
 });
